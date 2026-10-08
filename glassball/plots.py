@@ -23,6 +23,20 @@ SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a
 BLUES = LinearSegmentedColormap.from_list("seq", ["#fcfcfb", "#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"])
 
 
+def use_palette(**colors):
+    """Re-theme every chart, e.g. use_palette(GLASS="#B4532F", SURFACE="#FDF3EE", SEQ=[...]).
+    Keys: SURFACE INK INK2 MUTED GRID HOME DRAW AWAY GLASS GBM BOOK SERIES (list) SEQ (list, light to dark)."""
+    g = globals()
+    for k, v in colors.items():
+        if k == "SEQ":
+            g["BLUES"] = LinearSegmentedColormap.from_list("seq", v)
+        elif k in ("SURFACE", "INK", "INK2", "MUTED", "GRID", "HOME", "DRAW", "AWAY", "GLASS", "GBM", "BOOK", "SERIES"):
+            g[k] = v
+        else:
+            raise KeyError(f"unknown palette key {k!r}")
+    style()
+
+
 def style():
     matplotlib.rcParams.update({
         "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
