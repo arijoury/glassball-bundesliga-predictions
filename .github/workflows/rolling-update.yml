@@ -1,0 +1,42 @@
+# Pre-registered rolling forecast for 2026/27 (see preregistration/2026-27/PREREGISTRATION.md).
+# Runs daily; does nothing unless a new matchday has completed in both data sources.
+name: rolling-update
+
+on:
+  schedule:
+    - cron: "0 6 * * *"      # 06:00 UTC daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rolling-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    if: github.repository == 'arijoury/glassball-bundesliga-predictions'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install the frozen environment
+        run: pip install -r preregistration/2026-27/requirements.txt
+      - name: Verify the freeze
+        run: ./preregistration/2026-27/verify.sh
+      - name: Rolling update (frozen code, new data)
+        run: python -W ignore preregistration/2026-27/analysis/update.py
+      - name: Commit if there is a new update
+        run: |
+          if [ -n "$(git status --porcelain preregistration/2026-27/updates)" ]; then
+            git config user.name "glassball-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add preregistration/2026-27/updates
+            git commit -m "Rolling update: $(ls -1 preregistration/2026-27/updates | grep md | tail -1)"
+            git push
+          else
+            echo "No new matchday."
+          fi
