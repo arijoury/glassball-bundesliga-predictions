@@ -27,6 +27,10 @@ jobs:
         run: pip install -r preregistration/2026-27/requirements.txt
       - name: Verify the freeze
         run: ./preregistration/2026-27/verify.sh
+      - name: Check this machine reproduces the freeze (same code, same data, same cut-off)
+        run: |
+          python -W ignore preregistration/2026-27/analysis/update.py --matchday 4 --as-of 2026-10-08 --out /tmp/repro
+          diff -r preregistration/2026-27/freeze/2026-10-08 /tmp/repro/forecast && echo "Platform reproduces the freeze exactly"
       - name: Rolling update (frozen code, new data)
         run: python -W ignore preregistration/2026-27/analysis/update.py
       - name: Commit if there is a new update
