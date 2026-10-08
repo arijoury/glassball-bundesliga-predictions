@@ -1,11 +1,9 @@
 # glassball ⚽🔍
 
-**A Bundesliga forecast you can audit.** I froze a prediction for every remaining match of the 2026/27 season, plus the final table, on 8 October 2026, before matchday 5. It gets graded in public, however it turns out. Every probability traces back to the handful of numbers that produced it.
-
-Companion code to the talk *Soccer Analytics: Traceable and Honest Forecasting Across a Bundesliga Season* (Machine Learning Week Europe, Munich, 17 Nov 2026) and to the book [*Soccer Analytics with Machine Learning*](https://learning.oreilly.com/library/view/soccer-analytics-with/9781098181109/) (O'Reilly, 2026).
+**Bundesliga predictions you can audit.** Forecast any matchday or the final table of any Bundesliga season since 2004/05, past, present or future, with a model whose every probability traces back to the handful of numbers that produced it.
 
 ```bash
-pip install git+https://github.com/arijoury/bundesliga-2627-forecast
+pip install git+https://github.com/arijoury/glassball-bundesliga-predictions
 ```
 
 ```python
@@ -13,28 +11,12 @@ from glassball import Bundesliga
 
 Bundesliga(2026).predict()                         # next matchday, with the drivers of every probability
 Bundesliga(2026).forecast().table                  # simulated final table
-Bundesliga(2023).forecast(before_matchday=10)      # any season since 2004/05, from any point in time
+Bundesliga(2023).forecast(before_matchday=10)      # any season, from any point in time
 ```
 
----
+Data is downloaded from two free public sources and cached locally. No API keys, no accounts.
 
-## The frozen forecast
-
-| | |
-|---|---|
-| **Frozen** | 8 Oct 2026, after matchday 4, before Dortmund vs Werder Bremen (9 Oct, 20:30) |
-| **Fingerprint** | `e9753a97bafee5a04ce2c9229f843ed216f3e2459d97cd33a45006028530cf1a`: SHA-256 of [`MANIFEST.sha256`](MANIFEST.sha256), which hashes every frozen file (code, data, forecasts) |
-| **Verify** | `./scripts/verify_freeze.sh` |
-| **Rules** | [PREREGISTRATION.md](PREREGISTRATION.md): metrics, benchmarks and update protocol, all fixed in advance |
-| **Files** | [`freeze/2026-10-08/`](freeze/2026-10-08/): never edited |
-
-**Headline:** Bayern 81% to win the title, Dortmund 14%, Leverkusen 3%. Most at risk of relegation: Paderborn 37%, Union Berlin 33%, Schalke 31%, Hamburg 28%.
-
-![Final table forecast](figures/06_table_frozen.png)
-
-![Matchday 5 forecast](figures/05_matchday5_frozen.png)
-
-The black ticks show what the contrast model (a gradient-boosted classifier) says for the same matches. Both forecasts are frozen and both get graded.
+Companion code to the talk *Soccer Analytics: Traceable and Honest Forecasting Across a Bundesliga Season* (Machine Learning Week Europe, Munich, 17 Nov 2026) and to the book [*Soccer Analytics with Machine Learning*](https://learning.oreilly.com/library/view/soccer-analytics-with/9781098181109/) (O'Reilly, 2026). The model is also being tested live: a [pre-registered forecast for 2026/27](#live-test-a-pre-registered-forecast-for-202627) was frozen before matchday 5 and is graded in public.
 
 ---
 
@@ -47,12 +29,15 @@ E[home goals] = exp( base + home advantage + attack[home] + defence[away] )
 E[away goals] = exp( base                  + attack[away] + defence[home] )
 ```
 
-Score probabilities follow from a Poisson distribution with a [Dixon-Coles](https://doi.org/10.1111/1467-9876.00065) correction for low scores. So for any match you can ask *why*:
+Score probabilities follow from a Poisson distribution with a [Dixon-Coles](https://doi.org/10.1111/1467-9876.00065) correction for low scores. Ratings are fitted on time-weighted results (270-day half-life) and shrunk toward a prior, so newly promoted teams start cautious. So for any match you can ask *why*:
 
 ```python
 s = Bundesliga(2026)
-s.explain("Bayern Munich", "RB Leipzig")
+s.predict(5, contrast=True)                # a whole matchday, alongside a gradient-boosted contrast model
+s.explain("Bayern Munich", "RB Leipzig")   # the receipt for one match
 ```
+
+![Matchday 5](figures/05_matchday5_frozen.png)
 
 ![Drivers of Bayern vs Leipzig](figures/08_drivers_bayern_leipzig.png)
 
@@ -66,12 +51,15 @@ Every rating comes with a standard error, so you can ask how fragile a forecast 
 
 ### Which matches decide the season?
 
-The table forecast comes from 20,000 simulated seasons, so you can condition on any single result. Dortmund's title chances are 14% today. That becomes **29% if they win in Munich on matchday 8**, and 9% if they lose:
+The table forecast comes from 20,000 simulated seasons, and each one also draws the team ratings from their uncertainty, not just the match outcomes. So you can condition on any single result. Dortmund's title chances were 14% after matchday 4. That becomes **29% if they win in Munich on matchday 8**, and 9% if they lose:
 
 ```python
 fc = s.forecast()
-fc.swing("Dortmund", "title")       # or "top4", "relegated", ...
+fc.table                              # expected points, P(title / top 4 / relegation), full position distribution
+fc.swing("Dortmund", "title")         # or "top4", "top6", "playoff16", "relegated"
 ```
+
+![Final table forecast](figures/06_table_frozen.png)
 
 ![Title swing matches](figures/10_swing_dortmund_title.png)
 
@@ -91,19 +79,19 @@ s.forecast(shift={"Bayern Munich": {"attack": -0.15}})   # roughly: lose a top s
 
 ## Is it any good? Graded honestly
 
-Hyperparameters were tuned on 2019/20–2024/25, with each matchday predicted using only data from before it. The 2025/26 season was held out and used once. The benchmark that matters is the betting market: closing odds aggregate everything the public knows, team news included.
+`s.evaluate()` replays a season matchday by matchday, predicting each one with data from before it only, and scores it against a gradient-boosted model (Elo + form features) and the betting market. The market is the benchmark that matters: closing odds aggregate everything the public knows, team news included.
 
 ![RPS by season](figures/14_rps_by_season.png)
 
 - **The market wins, every season.** That's expected, and it's what makes this an honest yardstick rather than a straw man.
 - **The glass box beats the gradient-boosted model in 6 of 7 seasons** (ranked probability score 0.2037 vs 0.2072 overall; market 0.1977).
-- **The GBM's ranking depends on how you retrain it.** Retrained before every matchday (above), it loses 2025/26. Trained once at season start (the frozen validation in [PREREGISTRATION.md](PREREGISTRATION.md)), it *wins* 2025/26. Judge a model on one season and you can pick either.
+- **The GBM's ranking depends on how you retrain it.** Retrained before every matchday (above), it loses 2025/26. Trained once at season start (see the [pre-registration](preregistration/2026-27/PREREGISTRATION.md)), it *wins* 2025/26. Judge a model on one season and you can pick either.
 
 ![Calibration](figures/13_calibration.png)
 
 All three are well calibrated: when they say 30%, it happens about 30% of the time. The market's edge is *sharpness*. It's confident more often, and right when it is.
 
-The two models agree on which team is better. They disagree on how sure to be. The biggest disagreement is every Bayern home game: the glass box says 78–88%, while the GBM, whose trees can't extrapolate past what they've seen, says 60–72%. The frozen forecast will settle who's right.
+The two models agree on which team is better. They disagree on how sure to be. The biggest disagreement is every Bayern home game: the glass box says 78–88%, while the GBM, whose trees can't extrapolate past what they've seen, says 60–72%.
 
 ![Glass box vs GBM](figures/07_glassbox_vs_gbm.png)
 
@@ -111,12 +99,12 @@ The two models agree on which team is better. They disagree on how sure to be. T
 
 Honest models update slowly. Here is the model replaying Leverkusen's unbeaten 2023/24 season, re-forecasting before every matchday:
 
-![Title race 2023/24](figures/15_title_race_2023.png)
-
 ```python
 s = Bundesliga(2023)
 {md: s.forecast(before_matchday=md).table.p_title for md in range(1, 35)}
 ```
+
+![Title race 2023/24](figures/15_title_race_2023.png)
 
 ---
 
@@ -144,43 +132,60 @@ Over 16 seasons of refitted ratings, Bayern's dominance, Dortmund's peak years, 
 ```python
 from glassball import Bundesliga, plots
 
-s = Bundesliga(2026)              # season starting in 2026; data is downloaded and cached in ~/.cache/glassball
+s = Bundesliga(2026)              # the season starting in 2026; data is cached in ~/.cache/glassball
 s.fixtures                        # all 306 matches: matchday, kickoff, result, shots, odds (where played)
 s.table(after_matchday=4)         # league table at any point
 s.ratings(before_matchday=5)      # attack / defence ratings with standard errors
-s.predict(5, contrast=True)       # matchday 5: H/D/A, expected goals, drivers (+ GBM, + bookmakers if played)
+s.predict(5, contrast=True)       # H/D/A, expected goals, drivers (+ GBM; + bookmakers and result if played)
 s.explain("Dortmund", "Werder Bremen")
 fc = s.forecast(before_matchday=5, n_sims=20_000)
-fc.table                          # expected points/position, P(title/top4/top6/play-off/relegation), full position distribution
+fc.table                          # expected points/position, event probabilities, position distribution
 fc.swing("Union Berlin", "relegated")
-s.evaluate()                      # walk-forward grading of every played matchday vs GBM and bookmakers
+s.evaluate()                      # walk-forward grading of every played matchday
 
-plots.matchday(s.predict(contrast=True)); plots.table(fc); plots.explain(s.explain("Bayern Munich", "RB Leipzig"))
+plots.matchday(s.predict(contrast=True))
+plots.table(fc)
+plots.explain(s.explain("Bayern Munich", "RB Leipzig"))
+plots.swing(fc.swing("Dortmund", "title"))
 ```
 
-Time travel is built in: every method takes `before_matchday=` or `as_of=`. Forecasts only ever use matches played before that point, so any historical forecast is a genuine out-of-sample forecast. Seasons from 2004/05 onwards are supported, and future seasons work as soon as OpenLigaDB publishes their fixtures.
+**Time travel is built in.** Every method takes `before_matchday=` or `as_of=`, and forecasts only ever use matches played before that point. So any historical forecast is a genuine out-of-sample forecast. Seasons from 2004/05 onwards are supported, and future seasons work as soon as OpenLigaDB publishes their fixtures. Hyperparameters live in `glassball.Hyper` if you want to experiment: `Bundesliga(2026, hyper=Hyper(half_life_days=180))`.
 
-## Repository layout
+### Limitations
 
-```
-glassball/              the importable package
-src/                    the exact code that produced the freeze (kept byte-identical; see below)
-freeze/2026-10-08/      the pre-registered forecast
-data/raw/               the data snapshot used for the freeze
-updates/                rolling re-forecasts after each matchday (same frozen code)
-figures/                everything above;  python scripts/make_figures.py  regenerates it
-tests/                  includes a test that glassball reproduces the freeze from the snapshot
-```
-
-`glassball` is a packaged version of `src/`. The pre-registration promises that the rolling forecasts use the frozen code unchanged, so `src/` is never edited. `tests/test_reproduces_freeze.py` checks that the package regenerates the frozen match probabilities, GBM predictions and all 20,000 simulated seasons from the data snapshot.
-
-## Limitations, stated up front
-
-- No lineups, injuries or transfers. They only reach the model through results, with a lag. That's the point of the "drift" section of the talk.
+- No lineups, injuries or transfers. They only reach the model through results, with a lag.
 - Ratings are fixed within a forecast. A match in March is forecast with October's ratings, and only parameter uncertainty widens it.
 - Promoted teams start from a generic prior, so their ratings are the least certain.
 - Goals are noisy. xG-based ratings would likely be sharper, but public Bundesliga xG only starts in 2026/27.
 
 ---
 
-Built by Ari Joury at Wangari Global, where we build reliable, traceable AI and analytics. In football, that discipline keeps a forecast honest; in production, it keeps a model trustworthy.
+## Live test: a pre-registered forecast for 2026/27
+
+Backtests can be tuned until they look good, so this model is also being tested in the open. On **8 October 2026**, after matchday 4 and before matchday 5 kicked off, I froze its prediction for all 270 remaining matches and the final table, and fixed in advance how it would be graded.
+
+| | |
+|---|---|
+| **Headline** | Bayern 81% to win the title, Dortmund 14%, Leverkusen 3%. Relegation: Paderborn 37%, Union 33%, Schalke 31%, Hamburg 28% |
+| **Fingerprint** | `e9753a97bafee5a04ce2c9229f843ed216f3e2459d97cd33a45006028530cf1a` (SHA-256 of the manifest of every frozen file) |
+| **Verify** | `./scripts/verify_freeze.sh` |
+| **Everything** | [`preregistration/2026-27/`](preregistration/2026-27/): rules, frozen code, data snapshot, forecasts, and rolling updates after each matchday |
+
+The frozen folder is self-contained and never edited. The package is tested to reproduce it exactly from its data snapshot (`tests/test_reproduces_freeze.py`). First public grading: Machine Learning Week Europe, Munich, 17 November 2026, after matchdays 5–9.
+
+## Repository layout
+
+```
+glassball/                  the package
+tests/                      incl. a check that the package reproduces the frozen forecast
+scripts/make_figures.py     regenerates every figure in this README
+scripts/verify_freeze.sh    checks the frozen forecast against its published fingerprint
+figures/                    the figures above (and their cached inputs in figures/data/)
+preregistration/2026-27/    the live test: frozen, self-contained, graded in public
+```
+
+MIT licensed.
+
+---
+
+Built by [Ari Joury](https://www.linkedin.com/in/arijoury) at [Wangari Global](https://wangari.global), where we build reliable, traceable AI and analytics. In football, that discipline keeps a forecast honest; in production, it keeps a model trustworthy.

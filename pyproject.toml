@@ -3,12 +3,13 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "glassball"
+name = "glassball-bundesliga"
 version = "0.1.0"
 description = "Traceable, honestly-graded Bundesliga forecasts: every probability decomposes into its drivers."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+urls = { Homepage = "https://github.com/arijoury/glassball-bundesliga-predictions" }
 authors = [{ name = "Ari Joury", email = "ari.joury@wangari.global" }]
 dependencies = ["numpy>=1.26", "pandas>=2.1", "scipy>=1.11", "scikit-learn>=1.4", "matplotlib>=3.8"]
 

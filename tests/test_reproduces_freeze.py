@@ -6,7 +6,7 @@ import pandas as pd
 
 from glassball import Bundesliga
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "preregistration" / "2026-27"
 FREEZE = ROOT / "freeze" / "2026-10-08"
 TOL = 1e-4  # frozen CSVs are rounded to 4 decimals
 

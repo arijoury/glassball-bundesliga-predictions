@@ -3,7 +3,7 @@
     python scripts/make_figures.py            # all figures (~6 min, the backtest dominates)
     python scripts/make_figures.py --quick    # skip the slow ones if their data is cached
 
-Figures about the *forecast* are drawn from the frozen files in freeze/2026-10-08,
+Figures about the *forecast* are drawn from the frozen files in preregistration/2026-27/freeze/2026-10-08,
 never from a re-fit, so they show exactly what was pre-registered.
 """
 import argparse
@@ -21,7 +21,8 @@ from glassball.data import load_history  # noqa: E402
 from glassball.model import outcome_index  # noqa: E402
 from glassball.plots import BOOK, DRAW, GBM, GLASS, GRID, HOME, AWAY, INK, INK2, SERIES, _subtitle  # noqa: E402
 
-FIG, CACHE, FREEZE = ROOT / "figures", ROOT / "outputs" / "figure_data", ROOT / "freeze" / "2026-10-08"
+PRE = ROOT / "preregistration" / "2026-27"
+FIG, CACHE, FREEZE = ROOT / "figures", ROOT / "figures" / "data", PRE / "freeze" / "2026-10-08"
 FIG.mkdir(exist_ok=True); CACHE.mkdir(parents=True, exist_ok=True)
 
 
@@ -280,7 +281,7 @@ if __name__ == "__main__":
     dataset_figures(hist)
     ratings_evolution(hist)
     forecast_figures()
-    live = Bundesliga(2026, data_dir=ROOT / "data" / "raw",
-                      fixtures_file=ROOT / "data" / "raw" / "openligadb_bl1_2026_20261008.json")
+    live = Bundesliga(2026, data_dir=PRE / "data" / "raw",
+                      fixtures_file=PRE / "data" / "raw" / "openligadb_bl1_2026_20261008.json")
     drivers_figures(live)
     grading_figures(a.quick)
