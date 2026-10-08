@@ -40,11 +40,16 @@ def cache_dir() -> Path:
     return d
 
 
+progress = None  # optional callback(str) for download messages (the CLI sets it)
+
+
 def _fetch(url: str, path: Path, max_age_hours: float | None, offline: bool) -> Path | None:
     fresh = path.exists() and path.stat().st_size > 0 and (
         max_age_hours is None or time.time() - path.stat().st_mtime < max_age_hours * 3600)
     if fresh or offline:
         return path if path.exists() and path.stat().st_size > 0 else None
+    if progress:
+        progress(f"  downloading {url}")
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "glassball (github.com/arijoury)"})
         with urllib.request.urlopen(req, timeout=30) as r:
@@ -139,3 +144,50 @@ def load_history(first: int, last: int, **kw) -> pd.DataFrame:
     frames = [load_fd(y, **kw) for y in range(first, last + 1)]
     frames = [f for f in frames if len(f)]
     return pd.concat(frames, ignore_index=True).sort_values(["Date", "HomeTeam"]).reset_index(drop=True)
+
+
+def current_season(today: pd.Timestamp | None = None) -> int:
+    """The season being played (or about to start): from July onwards it's this year's."""
+    t = today or pd.Timestamp.today()
+    return t.year if t.month >= 7 else t.year - 1
+
+
+# Nicknames and spellings people actually type
+ALIASES = {
+    "bayern": "Bayern Munich", "fcb": "Bayern Munich", "fc bayern": "Bayern Munich", "munich": "Bayern Munich",
+    "bvb": "Dortmund", "borussia dortmund": "Dortmund",
+    "gladbach": "M'gladbach", "mönchengladbach": "M'gladbach", "monchengladbach": "M'gladbach", "bmg": "M'gladbach",
+    "köln": "FC Koln", "koln": "FC Koln", "koeln": "FC Koln", "cologne": "FC Koln", "effzeh": "FC Koln",
+    "frankfurt": "Ein Frankfurt", "eintracht": "Ein Frankfurt", "sge": "Ein Frankfurt",
+    "leipzig": "RB Leipzig", "rbl": "RB Leipzig", "hsv": "Hamburg", "hamburger sv": "Hamburg",
+    "werder": "Werder Bremen", "bremen": "Werder Bremen", "union": "Union Berlin", "fcu": "Union Berlin",
+    "s04": "Schalke 04", "schalke": "Schalke 04", "vfb": "Stuttgart", "b04": "Leverkusen", "bayer": "Leverkusen",
+    "tsg": "Hoffenheim", "scf": "Freiburg", "fca": "Augsburg", "m05": "Mainz", "05": "Mainz",
+    "fürth": "Greuther Furth", "furth": "Greuther Furth", "düsseldorf": "Fortuna Dusseldorf",
+    "dusseldorf": "Fortuna Dusseldorf", "fortuna": "Fortuna Dusseldorf", "pauli": "St Pauli", "st. pauli": "St Pauli",
+    "kiel": "Holstein Kiel", "hertha": "Hertha", "wolfsburg": "Wolfsburg", "vfl": "Wolfsburg", "bochum": "Bochum",
+}
+
+
+def _fold(s: str) -> str:
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFKD", s.lower()) if not unicodedata.combining(c)).strip()
+
+
+def resolve_team(name: str, teams) -> str:
+    """Map whatever the user typed to one of `teams` (case-, accent- and nickname-insensitive)."""
+    teams = list(teams)
+    if name in teams:
+        return name
+    key = _fold(name)
+    by_fold = {_fold(t): t for t in teams}
+    long_names = {_fold(o): f for o, f in NAMES.items() if f in teams}  # official names, e.g. "1. FC Köln"
+    for cand in (by_fold.get(key), ALIASES.get(name.lower()), ALIASES.get(key), long_names.get(key)):
+        if cand in teams:
+            return cand
+    hits = {t for f, t in {**by_fold, **long_names}.items() if key and key in f}
+    if len(hits) == 1:
+        return hits.pop()
+    msg = f"Unknown team {name!r}." + (f" Did you mean one of: {', '.join(sorted(hits))}?" if hits else
+                                        f" Teams this season: {', '.join(sorted(teams))}")
+    raise KeyError(msg)

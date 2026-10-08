@@ -46,6 +46,8 @@ class TableForecast:
     def swing(self, team: str, event: str = "title", top: int = 10) -> pd.DataFrame:
         """Which remaining matches move P(event) the most? Conditional probability of the
         event given each match result, straight from the simulated seasons."""
+        from .data import resolve_team
+        team = resolve_team(team, self.teams)
         hit = self.event(team, event)
         rows = []
         for j, f in enumerate(self.remaining.itertuples()):

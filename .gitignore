@@ -4,3 +4,6 @@ __pycache__/
 .venv/
 *.egg-info/
 linkedin_post_draft.md
+build/
+dist/
+.pytest_cache/

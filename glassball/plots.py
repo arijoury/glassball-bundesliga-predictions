@@ -243,3 +243,18 @@ def reliability(preds: dict[str, np.ndarray], outcomes: np.ndarray, bins=10):
     _subtitle(ax, "Calibration on the diagonal = honest probabilities")
     ax.legend(loc="upper left", fontsize=9)
     return fig
+
+
+def ratings(r: pd.DataFrame):
+    """Attack vs defence map of every team (top-right = strong at both ends)."""
+    fig, ax = plt.subplots(figsize=(7.5, 6.2))
+    ax.axhline(0, color=GRID, lw=1); ax.axvline(0, color=GRID, lw=1)
+    ax.errorbar(r.attack, -r.defence, xerr=r.attack_sd, yerr=r.defence_sd, fmt="none", ecolor=GRID, lw=1, zorder=1)
+    ax.scatter(r.attack, -r.defence, s=60, color=GLASS, edgecolor=SURFACE, linewidth=1.5, zorder=3)
+    for t in r.itertuples():
+        ax.annotate(t.team, (t.attack, -t.defence), xytext=(5, 4), textcoords="offset points", fontsize=8.5, color=INK)
+    ax.set_xlabel("attack  (→ scores more)")
+    ax.set_ylabel("defence  (↑ concedes less)")
+    ax.set_title("Team strength: attack vs defence")
+    _subtitle(ax, "Log-scale ratings vs an average Bundesliga side; whiskers = ±1 standard error")
+    return fig

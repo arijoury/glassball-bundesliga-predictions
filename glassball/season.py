@@ -29,8 +29,9 @@ class Bundesliga:
     >>> s.forecast(before_matchday=5).table  # simulated final table
     """
 
-    def __init__(self, season: int, *, hyper: Hyper | None = None, data_dir: str | Path | None = None,
+    def __init__(self, season: int | None = None, *, hyper: Hyper | None = None, data_dir: str | Path | None = None,
                  fixtures_file: str | Path | None = None, offline: bool = False, history_seasons: int = 14):
+        season = data.current_season() if season is None else int(season)
         if season < data.FIRST_SEASON:
             raise ValueError(f"Seasons from {data.FIRST_SEASON}/{data.FIRST_SEASON + 1} onwards are supported")
         self.season, self.hyper = season, hyper or Hyper()
@@ -64,18 +65,25 @@ class Bundesliga:
 
     # ---- time handling ---------------------------------------------------------------------
     def next_matchday(self) -> int | None:
+        """The matchday of the next match to be played (ignoring old postponed fixtures)."""
         open_ = self.fixtures[~self.fixtures.Finished]
-        return int(open_.Matchday.min()) if len(open_) else None
+        if not len(open_):
+            return None
+        upcoming = open_[open_.Kickoff >= pd.Timestamp.today().normalize()]
+        return int((upcoming if len(upcoming) else open_).sort_values("Kickoff").Matchday.iloc[0])
+
+    def team(self, name: str) -> str:
+        """Forgiving team lookup: 'bayern', 'BVB', 'gladbach', 'Köln' all work."""
+        return data.resolve_team(name, self.teams)
 
     def cutoff(self, before_matchday: int | None = None, as_of=None) -> pd.Timestamp:
         if as_of is not None:
             return pd.Timestamp(as_of)
         if before_matchday is not None:
             return self.fixtures.query("Matchday == @before_matchday").Kickoff.min().normalize()
-        if self.next_matchday() is None:  # season over: everything is known
-            return self.fixtures.Kickoff.max().normalize() + pd.Timedelta(days=1)
+        # default: now, i.e. every match finished so far (capped at the end of the season)
         return min(pd.Timestamp.today().normalize() + pd.Timedelta(days=1),
-                   self.fixtures[~self.fixtures.Finished].Kickoff.min().normalize())
+                   self.fixtures.Kickoff.max().normalize() + pd.Timedelta(days=1))
 
     def played(self, before_matchday=None, as_of=None) -> pd.DataFrame:
         c = self.cutoff(before_matchday, as_of)
@@ -114,6 +122,12 @@ class Bundesliga:
         dc = self.model(before_matchday, as_of)
         fx = self.fixtures.query("Matchday == @matchday")
         out = dc.predict(fx[["Matchday", "Kickoff", "HomeTeam", "AwayTeam"]])
+        scores = []
+        for r in out.itertuples():  # most likely scoreline
+            M = dc.score_matrix(r.xG_home, r.xG_away)
+            i, j = np.unravel_index(M.argmax(), M.shape)
+            scores.append(f"{i}-{j}")
+        out.insert(out.columns.get_loc("xG_away") + 1, "likely_score", scores)
         res = fx[["FTHG", "FTAG"]].reset_index(drop=True)
         out[["FTHG", "FTAG"]] = res.where(np.repeat(fx.Finished.to_numpy()[:, None], 2, axis=1))
         if {"AvgCH", "AvgCD", "AvgCA"} <= set(fx.columns) and fx.AvgCH.notna().any():
@@ -128,6 +142,7 @@ class Bundesliga:
     def explain(self, home: str, away: str, *, before_matchday=None, as_of=None) -> pd.DataFrame:
         """The receipt for one forecast: each additive driver, its uncertainty, and how far
         the home-win probability moves if that driver were one standard error higher."""
+        home, away = self.team(home), self.team(away)
         dc = self.model(before_matchday, as_of)
         idx, T = dc._idx()
         h, a = idx[home], idx[away]
@@ -164,6 +179,7 @@ class Bundesliga:
             dc = DixonColes(dc.hyper, list(dc.teams), dc.theta.copy(), dc.cov, dc.as_of, dc.n_matches)
             idx, T = dc._idx()
             for team, s in shift.items():
+                team = self.team(team)
                 dc.theta[2 + idx[team]] += s.get("attack", 0.0)
                 dc.theta[2 + T + idx[team]] += s.get("defence", 0.0)
         played = self.fixtures[self.fixtures.Finished & (self.fixtures.Kickoff < c)]

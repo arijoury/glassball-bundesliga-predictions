@@ -1,7 +1,7 @@
 """Regenerate every figure in the README.
 
-    python scripts/make_figures.py            # all figures (~6 min, the backtest dominates)
-    python scripts/make_figures.py --quick    # skip the slow ones if their data is cached
+    python preregistration/2026-27/analysis/make_figures.py            # all figures (~7 min, the backtest dominates)
+    python preregistration/2026-27/analysis/make_figures.py --quick    # reuse cached backtest data
 
 Figures about the *forecast* are drawn from the frozen files in preregistration/2026-27/freeze/2026-10-08,
 never from a re-fit, so they show exactly what was pre-registered.
@@ -14,15 +14,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 from glassball import Bundesliga, DixonColes, Hyper, plots  # noqa: E402
 from glassball.data import load_history  # noqa: E402
 from glassball.model import outcome_index  # noqa: E402
 from glassball.plots import BOOK, DRAW, GBM, GLASS, GRID, HOME, AWAY, INK, INK2, SERIES, _subtitle  # noqa: E402
 
-PRE = ROOT / "preregistration" / "2026-27"
-FIG, CACHE, FREEZE = ROOT / "figures", ROOT / "figures" / "data", PRE / "freeze" / "2026-10-08"
+PRE = Path(__file__).resolve().parents[1]
+FIG, CACHE, FREEZE = PRE / "figures", PRE / "figures" / "data", PRE / "freeze" / "2026-10-08"
 FIG.mkdir(exist_ok=True); CACHE.mkdir(parents=True, exist_ok=True)
 
 

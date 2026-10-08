@@ -1,8 +1,11 @@
 """The package must regenerate the frozen 8 Oct 2026 forecast from the frozen data snapshot."""
+import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
+import sklearn
 
 from glassball import Bundesliga
 
@@ -32,6 +35,11 @@ def test_table_forecast_identical():
     pd.testing.assert_frame_equal(new.loc[frozen.index, frozen.columns], frozen, atol=TOL, check_dtype=False)
 
 
+FROZEN_SKLEARN = json.loads((FREEZE / "meta.json").read_text())["versions"]["sklearn"]
+
+
+@pytest.mark.skipif(sklearn.__version__ != FROZEN_SKLEARN,
+                    reason=f"the GBM only reproduces under scikit-learn {FROZEN_SKLEARN} (the glass box reproduces everywhere)")
 def test_gbm_identical():
     s = season()
     frozen = pd.read_csv(FREEZE / "match_forecasts.csv")
