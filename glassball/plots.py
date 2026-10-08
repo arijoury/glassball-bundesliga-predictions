@@ -258,3 +258,85 @@ def ratings(r: pd.DataFrame):
     ax.set_title("Team strength: attack vs defence")
     _subtitle(ax, "Log-scale ratings vs an average Bundesliga side; whiskers = ±1 standard error")
     return fig
+
+
+def crowd(r: dict):
+    """Home advantage by season (team strength held fixed), with the ghost-game period highlighted."""
+    e = r["by_era"].copy()
+    order = sorted([x for x in e.era if x[0].isdigit()], key=lambda x: x[:4])
+    ghost_pos = next((i for i, x in enumerate(order) if x.startswith("2020") or x.startswith("2021")), len(order))
+    order.insert(ghost_pos, "ghost")
+    e = e.set_index("era").loc[[o for o in order if o in set(e.era)]]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.4), gridspec_kw={"width_ratios": [1.7, 1]})
+    ax = axes[0]
+    x = np.arange(len(e))
+    colors = [AWAY if i == "ghost" else (MUTED if "partial" in i else GLASS) for i in e.index]
+    ax.axhline(r["home_adv_with_fans"], color=GLASS, lw=1, ls=(0, (3, 2)))
+    ax.text(-0.45, r["home_adv_with_fans"], "pooled, with fans", va="bottom", ha="left", fontsize=8.5, color=INK2)
+    ax.axhline(0, color=INK2, lw=0.8)
+    for xi, (era, row), c in zip(x, e.iterrows(), colors):
+        ax.plot([xi, xi], [row.home_adv - 1.96 * row.se, row.home_adv + 1.96 * row.se], color=c, lw=2, alpha=0.5)
+        ax.scatter(xi, row.home_adv, s=70, color=c, edgecolor=SURFACE, linewidth=1.5, zorder=3)
+    labels = ["no fans" if i == "ghost" else i[2:].replace(" (partial)", "\npartial") for i in e.index]
+    ax.set_xticks(x, labels, fontsize=8.5)
+    ax.grid(axis="x", visible=False)
+    ticks = [-0.1, 0, 0.1, 0.2, 0.3, 0.4, 0.5]  # extra home goals, as a fraction
+    ax.set_yticks(np.log1p(ticks), [f"{100 * t:+.0f}%" for t in ticks])
+    ax.set_ylim(np.log1p(-0.12), np.log1p(0.6))
+    ax.set_ylabel("extra goals for the home side")
+    lo, hi = r["crowd_effect_ci95"]
+    ax.set_title("Home advantage, season by season")
+    _subtitle(ax, f"Team strength held fixed per season; bars = 95% CI. Crowd effect {r['crowd_effect']:+.2f} log-rate "
+                  f"(CI {lo:+.2f} to {hi:+.2f}), ≈{100 * r['crowd_share']:.0f}% of home advantage")
+
+    ax = axes[1]
+    m = r["mechanisms"]
+    m = m[m.condition.isin(["with fans", "without fans"])]
+    names = list(dict.fromkeys(m.measure))
+    w = 0.36
+    for k, (cond, c) in enumerate([("with fans", GLASS), ("without fans", AWAY)]):
+        d = m[m.condition == cond].set_index("measure").loc[names]
+        yy = np.arange(len(names)) + (k - 0.5) * w
+        ax.barh(yy, d.home_edge_per_match, height=w * 0.9, color=c, label=cond, xerr=1.96 * d.se,
+                error_kw=dict(ecolor=INK2, lw=1))
+    nice = {"yellow cards": "fewer yellow cards", "fouls": "fewer fouls called", "shots": "more shots"}
+    ax.set_yticks(range(len(names)), [nice[n] for n in names])
+    ax.invert_yaxis()
+    ax.grid(axis="y", visible=False)
+    ax.axvline(0, color=INK2, lw=0.8)
+    ax.set_title("Where it went")
+    _subtitle(ax, "Home side's edge per match (95% CI)")
+    ax.legend(loc="upper left", bbox_to_anchor=(0, -0.08), ncol=2, fontsize=9)
+    fig.tight_layout()
+    return fig
+
+
+def form(r: dict):
+    """Naive vs strength-adjusted 'momentum'."""
+    d = r["data"]
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+    n = r["window"]
+    for ax, xcol, ycol, title, sub, b, se in [
+        (axes[0], "form_points", "points", "Naive: form looks real",
+         f"next-game points vs points in the last {n}", r["naive_slope"], r["naive_se"]),
+        (axes[1], "form_surprise", "surprise", "Adjusted for strength: it isn't",
+         f"next-game surprise vs surprise over the last {n} (vs model expectation)", r["adjusted_slope"], r["adjusted_se"])]:
+        if xcol == "form_points":
+            g = d.groupby(xcol)[ycol].agg(["mean", "sem", "size"])
+        else:
+            bins = np.clip(np.round(d[xcol]), -6, 6)
+            g = d.groupby(bins)[ycol].agg(["mean", "sem", "size"])
+        g = g[g["size"] >= 30]
+        ax.errorbar(g.index, g["mean"], yerr=1.96 * g["sem"], fmt="o", color=GLASS, ecolor=GRID, elinewidth=3,
+                    markersize=7, markeredgecolor=SURFACE)
+        xs = np.linspace(g.index.min(), g.index.max(), 10)
+        intercept = d[ycol].mean() - b * d[xcol].mean()
+        ax.plot(xs, intercept + b * xs, color=INK, lw=1.5)
+        ax.set_title(title)
+        _subtitle(ax, sub)
+        ax.text(0.98, 0.04, f"slope {b:+.3f} ± {se:.3f}", transform=ax.transAxes, ha="right", fontsize=9, color=INK2)
+    axes[0].set_xlabel(f"points in the last {n} games"); axes[0].set_ylabel("points next game")
+    axes[1].set_xlabel(f"points above expectation, last {n}"); axes[1].set_ylabel("points above expectation, next game")
+    axes[1].axhline(0, color=INK2, lw=0.8)
+    fig.tight_layout()
+    return fig

@@ -17,7 +17,7 @@ import pandas as pd
 
 from . import data, ml
 from .model import DixonColes, Hyper, brier, logloss, odds_to_probs, outcome_index, rps
-from .simulate import TableForecast, league_table, simulate
+from .simulate import TableForecast, league_table, simulate, simulate_outcomes
 
 
 class Bundesliga:
@@ -170,11 +170,28 @@ class Bundesliga:
 
     # ---- the whole season ------------------------------------------------------------------
     def forecast(self, *, before_matchday=None, as_of=None, n_sims: int = 20_000, seed: int = 20261008,
-                 shift: dict | None = None) -> TableForecast:
-        """Simulate the rest of the season. `shift={"Bayern Munich": {"attack": -0.1}}` runs a
-        what-if (e.g. a star striker out: roughly 10% fewer goals)."""
+                 shift: dict | None = None, model: str = "glassbox",
+                 rating_uncertainty: bool = True) -> TableForecast:
+        """Simulate the rest of the season.
+
+        shift={"Bayern Munich": {"attack": -0.1}}   what-if (e.g. a star striker out: ~10% fewer goals)
+        model="gbm"                                 use the gradient-boosted classifier instead
+        rating_uncertainty=False                    treat the ratings as known exactly (overconfident!)
+        """
         c = self.cutoff(before_matchday, as_of)
+        played = self.fixtures[self.fixtures.Finished & (self.fixtures.Kickoff < c)]
+        remaining = self.fixtures[~self.fixtures.index.isin(played.index)].reset_index(drop=True)
+        if model == "gbm":
+            if shift:
+                raise ValueError("what-ifs need the glass box: the GBM has no attack/defence ratings to shift")
+            gbm, state = self._gbm(c)
+            P = ml.predict_fixtures(gbm, state, remaining)[["ml_pH", "ml_pD", "ml_pA"]].to_numpy()
+            return simulate_outcomes(league_table(played, self.teams), remaining, P, np.random.default_rng(seed), n_sims)
+        if model != "glassbox":
+            raise ValueError(f"unknown model {model!r}; use 'glassbox' or 'gbm'")
         dc = self._fit(c)
+        if not rating_uncertainty:
+            dc = DixonColes(dc.hyper, list(dc.teams), dc.theta, np.zeros_like(dc.cov), dc.as_of, dc.n_matches)
         if shift:
             dc = DixonColes(dc.hyper, list(dc.teams), dc.theta.copy(), dc.cov, dc.as_of, dc.n_matches)
             idx, T = dc._idx()
@@ -182,11 +199,10 @@ class Bundesliga:
                 team = self.team(team)
                 dc.theta[2 + idx[team]] += s.get("attack", 0.0)
                 dc.theta[2 + T + idx[team]] += s.get("defence", 0.0)
-        played = self.fixtures[self.fixtures.Finished & (self.fixtures.Kickoff < c)]
-        remaining = self.fixtures[~self.fixtures.index.isin(played.index)].reset_index(drop=True)
         return simulate(dc, league_table(played, self.teams), remaining, np.random.default_rng(seed), n_sims)
 
     # ---- grading -----------------------------------------------------------------------------
+    @lru_cache(maxsize=8)
     def _gbm(self, cutoff):
         feats, state = ml.build(self._results, cutoff)
         train = feats[feats.Season > self.history.Season.min()]  # first season = Elo burn-in

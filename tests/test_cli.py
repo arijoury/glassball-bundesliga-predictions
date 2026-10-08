@@ -37,3 +37,29 @@ def test_friendly_errors(capsys):
     assert main(["explain", "bayern", "borussia"] + BASE) == 2
     assert "Did you mean" in capsys.readouterr().err
     assert main(["winner", "--shift", "nonsense"] + BASE) == 2
+
+
+@pytest.mark.parametrize("cmd", [
+    ["winner", "--model", "gbm"], ["matchday", "--model", "gbm"], ["table", "--fixed-ratings"],
+    ["winner", "--half-life", "120"], ["swing", "bvb", "--model", "gbm"],
+])
+def test_model_flags(cmd, capsys):
+    assert main(cmd + BASE) == 0
+    assert capsys.readouterr().out.strip()
+
+
+def test_gbm_cannot_explain_or_shift(capsys):
+    assert main(["explain", "bayern", "bvb", "--model", "gbm"] + BASE) == 2
+    assert main(["winner", "--model", "gbm", "--shift", "bayern:attack=-0.1"] + BASE) == 2
+
+
+def test_crowd_natural_experiment(capsys):
+    assert main(["crowd", "--data-dir", str(SNAP), "-q"]) == 0
+    out = capsys.readouterr().out
+    assert "Crowd effect" in out and "yellow cards" in out
+
+
+def test_crowd_estimate_is_stable():
+    from glassball import causal
+    r = causal.crowd_effect(2015, 2024, data_dir=SNAP)
+    assert 0.05 < r["crowd_effect"] < 0.15 and r["home_adv_with_fans"] > r["home_adv_without_fans"]

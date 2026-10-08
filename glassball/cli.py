@@ -27,6 +27,9 @@ examples:
   glassball winner --shift "bayern:attack=-0.15"     what if Bayern lose their top scorer?
   glassball table --season 2023 -b 10    2023/24 as it looked before matchday 10
   glassball evaluate --season 2025       how good was the model last season?
+  glassball winner --model gbm           the same question, asked to the machine-learning model
+  glassball crowd                        how much of home advantage is the crowd? (ghost-game natural experiment)
+  glassball form                         is "form" real, or just team strength in disguise?
 
 team names are forgiving: bayern, BVB, gladbach, köln, hsv, s04 ... (see `glassball teams`)
 """
@@ -54,6 +57,13 @@ def build_parser() -> argparse.ArgumentParser:
     o.add_argument("--plot", metavar="FILE", help="also save a chart (.png, .svg or .pdf)")
     o.add_argument("--csv", metavar="FILE", help="also save the result as CSV")
     o.add_argument("--json", action="store_true", help="print the result as JSON instead of a table")
+    mo = common.add_argument_group("model")
+    mo.add_argument("--model", choices=["glassbox", "gbm"], default="glassbox",
+                    help="glassbox (default): explainable goals model; gbm: gradient-boosted classifier on Elo + form")
+    mo.add_argument("--half-life", type=float, metavar="DAYS",
+                    help="glass box memory: how fast old results fade (default 270; lower = reacts faster to form)")
+    mo.add_argument("--fixed-ratings", action="store_true",
+                    help="simulate as if team ratings were known exactly (shows how overconfident that is)")
     m = common.add_argument_group("simulation and data")
     m.add_argument("--sims", type=int, default=10_000, metavar="N", help="simulated seasons (default 10000)")
     m.add_argument("--seed", type=int, default=20261008, help="random seed (default 20261008)")
@@ -93,6 +103,13 @@ def build_parser() -> argparse.ArgumentParser:
     ev = add("evaluate", "grade the model on the matchdays already played (vs bookmakers and a GBM)")
     ev.add_argument("--no-contrast", action="store_true", help="skip the GBM (faster)")
     add("teams", "list team names and accepted nicknames")
+    cr = add("crowd", "causal: how much of home advantage is the crowd? (2020-21 ghost games as a natural experiment)")
+    cr.add_argument("--seasons", default="2015-2024", metavar="A-B", help="seasons to compare (default 2015-2024)")
+    cr.add_argument("--exclude-autumn-2020", action="store_true",
+                    help="robustness: drop Sep-Oct 2020, when a few stadiums briefly admitted small crowds")
+    fo = add("form", "causal: does recent form predict results beyond team strength?")
+    fo.add_argument("--seasons", default="2012-2025", metavar="A-B", help="seasons to analyse (default 2012-2025)")
+    fo.add_argument("--window", type=int, default=3, help="form = last N matches (default 3)")
     return p
 
 
@@ -200,7 +217,10 @@ def cmd_winner(s, a, out):
 def forecast(s, a, out):
     shifts = parse_shifts(a.shift, s)
     out.info(f"simulating {a.sims:,} seasons ({describe_cutoff(s, a)})" + (f", what-if: {shifts}" if shifts else "") + " ...")
-    return s.forecast(**when(a), n_sims=a.sims, seed=a.seed, shift=shifts or None)
+    if a.model == "gbm":
+        out.info("model: gradient-boosted classifier (no goal model: ties on points broken by current goal difference)")
+    return s.forecast(**when(a), n_sims=a.sims, seed=a.seed, shift=shifts or None, model=a.model,
+                      rating_uncertainty=not a.fixed_ratings)
 
 
 def cmd_table(s, a, out):
@@ -250,9 +270,13 @@ def cmd_matchday(s, a, out):
         mds = [m for m in mds if m >= (a.before_matchday or 0)]
     else:
         kw = {k: v for k, v in when(a).items() if v is not None}
+    gbm = a.model == "gbm"
     frames = []
     for md in mds:
-        p = s.predict(md, contrast=a.contrast, **kw)
+        p = s.predict(md, contrast=a.contrast or gbm, **kw)
+        if gbm:  # the GBM's probabilities take the main columns; it has no goal model
+            p[["pH", "pD", "pA"]] = p[["ml_pH", "ml_pD", "ml_pA"]].to_numpy()
+            p["likely_score"] = "–"
         if a.matchday == "all":
             p = p[p.FTHG.isna()]
         frames.append(p)
@@ -264,10 +288,10 @@ def cmd_matchday(s, a, out):
 
     df["pick"] = [pick(r) for r in df.itertuples()]
     played = df.FTHG.notna()
-    cols = ["Matchday", "Kickoff", "HomeTeam", "AwayTeam", "pH", "pD", "pA", "pick", "likely_score"]
-    if a.verbose:
+    cols = ["Matchday", "Kickoff", "HomeTeam", "AwayTeam", "pH", "pD", "pA", "pick"] + ([] if gbm else ["likely_score"])
+    if a.verbose and not gbm:
         cols += ["xG_home", "xG_away"]
-    if a.contrast:
+    if a.contrast and not gbm:
         cols += ["ml_pH", "ml_pD", "ml_pA"]
     if played.any():
         df["result"] = [f"{int(h)}-{int(g)}" if pd.notna(h) else "" for h, g in zip(df.FTHG, df.FTAG)]
@@ -297,7 +321,10 @@ def cmd_matchday(s, a, out):
     emit(out_df, a, pretty)
     out.note("pick = most likely result; top score = most likely exact score. These can differ: "
              "a 1-1 is often the single likeliest score even when one side is favourite.")
-    if a.verbose and not a.json:
+    if gbm:
+        out.note("model: gradient-boosted classifier. It gives win/draw/loss odds only: no expected goals, "
+                 "no scores, and no breakdown of why. Try the same matchday without --model gbm.")
+    if a.verbose and not a.json and not gbm:
         print()
         for r in df.itertuples():
             print(f"  {r.HomeTeam} vs {r.AwayTeam}: home goals ×{np.exp(r.drv_base):.2f} base ×{np.exp(r.drv_home_adv):.2f} "
@@ -314,6 +341,9 @@ def cmd_matchday(s, a, out):
 
 
 def cmd_explain(s, a, out):
+    if a.model == "gbm":
+        raise ValueError("the GBM can't explain a single forecast; that's the point of the glass box. "
+                         "Drop --model gbm (or compare them with: glassball matchday --contrast)")
     ex = s.explain(a.home, a.away, **when(a))
     at = ex.attrs
     M = at["matrix"]
@@ -438,6 +468,84 @@ def cmd_overview(s, a, out):
         out.note("More: glassball table | glassball matchday all | glassball explain HOME AWAY | glassball --help")
 
 
+def seasons_arg(txt):
+    a_, b_ = (txt.split("-") + [txt])[:2]
+    return season_arg(a_), season_arg(b_)
+
+
+def cmd_crowd(a, out):
+    from . import causal
+    first, last = seasons_arg(a.seasons)
+    out.info(f"fitting home advantage {season_name(first)}–{season_name(last)} with team-season strengths held fixed ...")
+    r = causal.crowd_effect(first, last, exclude_early_2020_21=a.exclude_autumn_2020,
+                            offline=a.offline, data_dir=a.data_dir)
+    lo, hi = r["crowd_effect_ci95"]
+    if a.json:
+        print(json.dumps({k: (v.to_dict("records") if isinstance(v, pd.DataFrame) else v) for k, v in r.items()},
+                         indent=2, default=float))
+        return
+    if a.csv:
+        r["by_era"].to_csv(a.csv, index=False)
+    print(f"Home advantage with fans:     home teams score {pct(r['home_goals_boost_with_fans'])} more goals "
+          f"(log-rate {r['home_adv_with_fans']:.3f})")
+    print(f"Home advantage without fans:  {pct(r['home_goals_boost_without_fans'])} more "
+          f"(log-rate {r['home_adv_without_fans']:.3f}; ghost games, May 2020 – May 2021)")
+    print(f"\nCrowd effect: {r['crowd_effect']:+.3f} log-rate  (95% CI {lo:+.3f} to {hi:+.3f}),"
+          f" about {pct(r['crowd_share'])} of home advantage")
+    print(f"Worth about {r['points_per_season_from_crowd']:.1f} points per team per season "
+          f"({r['home_points_with_fans']:.2f} vs {r['home_points_without_fans']:.2f} points per home game, two average teams)")
+    if lo < 0 < hi:
+        print("The interval includes zero: one ghost season is ~390 matches, so this is suggestive rather than conclusive.")
+    mech = r["mechanisms"]
+    if len(mech):
+        print("\nHow? Home teams' edge per match, with vs without fans:")
+        for m_, d in mech.groupby("measure", sort=False):
+            d = d.set_index("condition")
+            if {"with fans", "without fans"} <= set(d.index):
+                f_, g_ = d.loc["with fans"], d.loc["without fans"]
+                lab = {"yellow cards": "fewer yellow cards", "fouls": "fewer fouls called", "shots": "more shots"}[m_]
+                print(f"  {lab:<22} {f_.home_edge_per_match:5.2f} ± {f_.se:.2f}   →   {g_.home_edge_per_match:5.2f} ± {g_.se:.2f}")
+    if a.verbose:
+        print("\nHome advantage (log-rate) by season, team strength held fixed:")
+        print(r["by_era"].to_string(index=False, formatters={"home_adv": "{:+.3f}".format, "se": "{:.3f}".format}))
+    out.note("Design: home vs away for the same team, with vs without fans (difference-in-differences), in a Poisson "
+             "model with separate team strengths for every season. Assumes nothing else that favours home teams "
+             "changed in 2020-21. 2021/22 (partial crowds) is reported separately.")
+    if a.plot:
+        from . import plots
+        save_plot(plots.crowd(r), a.plot, out)
+
+
+def cmd_form(a, out):
+    from . import causal
+    first, last = seasons_arg(a.seasons)
+    out.info(f"predicting every match {season_name(first)}–{season_name(last)} blind, then testing form ...")
+    r = causal.momentum(first, last, window=a.window, offline=a.offline, data_dir=a.data_dir)
+    if a.json:
+        print(json.dumps({k: v for k, v in r.items() if k != "data"}, indent=2, default=float))
+        return
+    if a.csv:
+        r["data"].to_csv(a.csv, index=False)
+    n = a.window
+    print(f"{r['matches']:,} team-matches, {season_name(first)}–{season_name(last)}, form = last {n} matches\n")
+    print(f"Naive:    each extra point in the last {n} games → {r['naive_slope']:+.3f} points next game "
+          f"(± {r['naive_se']:.3f}). Looks like momentum.")
+    print(f"Adjusted: each point *above expectation* in the last {n} → {r['adjusted_slope']:+.3f} points above "
+          f"expectation next game (± {r['adjusted_se']:.3f}).")
+    print(f"\n'Hot' teams (≥3 points above expectation over the last {n}): next game {r['hot_next_points']:.2f} points "
+          f"vs {r['hot_next_expected']:.2f} expected  (n={r['hot_n']})")
+    print(f"'Cold' teams (≥3 points below):                       next game {r['cold_next_points']:.2f} points "
+          f"vs {r['cold_next_expected']:.2f} expected  (n={r['cold_n']})")
+    out.note("Form mostly reflects strength, which the ratings already track. Once strength is accounted for, "
+             "recent results add little or nothing. 'Expected' comes from the glass box, fitted only on matches "
+             "before each game.")
+    if a.plot:
+        from . import plots
+        save_plot(plots.form(r), a.plot, out)
+
+
+CAUSAL = {"crowd": cmd_crowd, "form": cmd_form}
+
 COMMANDS = {"overview": cmd_overview, "winner": cmd_winner, "table": cmd_table, "matchday": cmd_matchday,
             "explain": cmd_explain, "swing": cmd_swing, "standings": cmd_standings, "ratings": cmd_ratings,
             "evaluate": cmd_evaluate, "teams": cmd_teams}
@@ -459,9 +567,14 @@ def main(argv=None):
         if a.refresh:
             for f in (data.cache_dir() / f"D1_{data.season_code(season)}.csv", data.cache_dir() / f"oldb_bl1_{season}.json"):
                 f.unlink(missing_ok=True)
-        out.info(f"loading Bundesliga {season_name(season)} ...")
         data.progress = out.info
-        s = Bundesliga(season, offline=a.offline, data_dir=a.data_dir, fixtures_file=a.fixtures_file)
+        if a.command in ("crowd", "form"):  # multi-season analyses load their own data
+            CAUSAL[a.command](a, out)
+            return 0
+        from .model import Hyper
+        hyper = Hyper(half_life_days=a.half_life) if a.half_life else None
+        out.info(f"loading Bundesliga {season_name(season)} ...")
+        s = Bundesliga(season, offline=a.offline, data_dir=a.data_dir, fixtures_file=a.fixtures_file, hyper=hyper)
         if a.verbose:
             out.info(f"{s!r}; data cached in {a.data_dir or data.cache_dir()}")
         COMMANDS[a.command](s, a, out)

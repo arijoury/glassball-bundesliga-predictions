@@ -105,6 +105,30 @@ def simulate(dc: DixonColes, table: pd.DataFrame, remaining: pd.DataFrame, rng,
         all_ranks[start:start + m], all_pts[start:start + m] = rank, pts
         all_out[start:start + m] = np.where(hg > ag, 0, np.where(hg == ag, 1, 2))
 
+    return _summarise(teams, remaining, all_ranks, all_pts, all_out)
+
+
+def simulate_outcomes(table: pd.DataFrame, remaining: pd.DataFrame, P: np.ndarray, rng,
+                      n_sims: int = 20_000) -> TableForecast:
+    """Season simulation from home/draw/away probabilities only (for models without a goal
+    model, like the GBM). Ties on points are broken by the current goal difference, then a coin."""
+    teams = list(table.drop(columns="Pos", errors="ignore").index)
+    table = table.loc[teams]
+    ti = {t: i for i, t in enumerate(teams)}
+    hs = np.array([ti[t] for t in remaining.HomeTeam], dtype=int)
+    as_ = np.array([ti[t] for t in remaining.AwayTeam], dtype=int)
+    cum = np.cumsum(P, axis=1)
+    k = (rng.random((n_sims, len(remaining), 1)) > cum[None, :, :2]).sum(-1).astype(np.int8)
+    pts = np.tile(table.Pts.to_numpy(float), (n_sims, 1))
+    rows = np.arange(n_sims)[:, None]
+    np.add.at(pts, (rows, hs), np.choose(k, [3, 1, 0]))
+    np.add.at(pts, (rows, as_), np.choose(k, [0, 1, 3]))
+    key = pts * 1e6 + (table.GD.to_numpy(float) + 500) * 1e3 + rng.random(pts.shape)
+    rank = (-key).argsort(1).argsort(1)
+    return _summarise(teams, remaining, rank.astype(np.int8), pts.astype(np.int16), k)
+
+
+def _summarise(teams, remaining, all_ranks, all_pts, all_out) -> TableForecast:
     n = len(teams)
     pos = np.stack([(all_ranks == p).mean(0) for p in range(n)], axis=1)
     out = pd.DataFrame(pos, index=teams, columns=[f"pos_{i + 1}" for i in range(n)])

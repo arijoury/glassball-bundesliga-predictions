@@ -4,6 +4,8 @@
 
 No API keys, no accounts, no data wrangling. glassball downloads free public data and caches it on your machine.
 
+The methods are explained step by step, with code, in the companion book: Gao et al., [*Soccer Analytics with Machine Learning*](https://learning.oreilly.com/library/view/soccer-analytics-with/9781098181109/), O'Reilly 2026.
+
 ## Install
 
 Requires Python 3.10 or newer.
@@ -51,6 +53,8 @@ The first run takes a minute while it downloads about 15 seasons of history. Aft
 | The real table right now | `glassball standings` |
 | How good is the model, honestly? | `glassball evaluate --season 2025` |
 | Which team names can I type? | `glassball teams` |
+| How much of home advantage is the crowd? | `glassball crowd` |
+| Is "form" real, or just strength in disguise? | `glassball form` |
 
 Team names are forgiving: `bayern`, `BVB`, `gladbach`, `köln`, `hsv` and `s04` all work.
 
@@ -71,6 +75,24 @@ Team names are forgiving: `bayern`, `BVB`, `gladbach`, `köln`, `hsv` and `s04` 
 | `--offline`, `--refresh` | Use cached data only / re-download the current season now |
 
 `glassball --help` and `glassball <command> --help` list everything.
+
+## Choosing a model
+
+| Option | What it does |
+|---|---|
+| `--model glassbox` | **Default.** The explainable goals model described below. Everything works with it |
+| `--model gbm` | A gradient-boosted classifier (scikit-learn) on Elo ratings and recent form: a typical machine-learning approach, for comparison. It gives win/draw/loss odds only, so there are no scores, no `explain`, and no `--shift` |
+| `--half-life 120` | How quickly the glass box forgets old results (default 270 days). Lower values react faster to form but are noisier |
+| `--fixed-ratings` | Simulates the season as if every team's strength were known exactly. Compare it with the default to see how overconfident that makes the table |
+
+```bash
+glassball winner                     # Bayern 80% (glass box)
+glassball winner --model gbm         # Bayern 58%: same data, different model
+glassball winner --fixed-ratings     # Bayern 89%: what ignoring uncertainty does
+glassball matchday --contrast        # both models side by side, match by match
+```
+
+The bookmakers' odds are never used to make predictions. They only appear as a benchmark in `evaluate` and on past matchdays.
 
 ### A few recipes
 
@@ -114,6 +136,22 @@ Every method takes `before_matchday=` or `as_of=`, so any forecast for a past se
 
 **Reading the output:** *pick* is the most likely result; *top score* is the single most likely exact score. They can disagree: 1–1 is often the likeliest score even when one side is a clear favourite, because a favourite's wins are spread over 1–0, 2–0, 2–1 and so on.
 
+## Cause, not just prediction
+
+A forecast tells you *what* will probably happen. Some questions are about *why*, and those need a design that rules out the obvious confounders, not just a model. glassball includes two:
+
+**`glassball crowd`: how much of home advantage is the crowd?** From May 2020 to May 2021 the Bundesliga played without fans: same teams, same stadiums, crowd removed. That's a natural experiment. glassball compares each team at home vs away, with vs without fans (a difference-in-differences design), with every team's strength held fixed per season. You get the crowd's share of home advantage with a confidence interval, what it's worth in points, and *how* it worked (cards, fouls, shots). The output states its assumptions and says plainly when the interval includes zero.
+
+**`glassball form`: is form real?** Teams on a winning run do keep winning, mostly because they're good. glassball predicts every match blind, then asks whether a team that has *beaten the model's expectations* recently keeps doing so. The naive version and the strength-adjusted version are shown side by side, so you can see the confounding disappear.
+
+```bash
+glassball crowd -v --plot crowd.png      # season-by-season home advantage, ghost games highlighted
+glassball crowd --exclude-autumn-2020    # robustness: drop the weeks with small crowds in 2020/21
+glassball form --window 5 --plot form.png
+```
+
+From Python: `from glassball import causal`, then `causal.crowd_effect()` and `causal.momentum()`.
+
 ### How good is it?
 
 Over seven seasons (2019/20–2025/26), predicting every matchday blind, it beat a typical machine-learning baseline (gradient boosting on Elo and form) in six of them. It lost to the bookmakers every time, which is normal: betting odds include team news this model never sees. Its probabilities are well calibrated: when it says 30%, it happens about 30% of the time. Check any season yourself with `glassball evaluate --season YEAR`.
@@ -144,7 +182,13 @@ pip install -e ".[dev]" && pytest
 
 The tests include an offline run of every CLI command, and a check that the package reproduces the frozen 2026/27 forecast exactly.
 
-Background on the methods: [*Soccer Analytics with Machine Learning*](https://learning.oreilly.com/library/view/soccer-analytics-with/9781098181109/) (O'Reilly, 2026). MIT licensed.
+## Learn more
+
+The modelling behind glassball (Poisson regression, classification, gradient boosting, feature engineering, evaluating forecasts against betting markets) is covered step by step in:
+
+> Gao et al., [*Soccer Analytics with Machine Learning*](https://learning.oreilly.com/library/view/soccer-analytics-with/9781098181109/), O'Reilly 2026
+
+MIT licensed.
 
 ---
 
