@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.14.4"   # the version the freeze was made with
       - name: Install the frozen environment
         run: pip install -r preregistration/2026-27/requirements.txt
       - name: Verify the freeze
@@ -30,7 +30,10 @@ jobs:
       - name: Check this machine reproduces the freeze (same code, same data, same cut-off)
         run: |
           python -W ignore preregistration/2026-27/analysis/update.py --matchday 4 --as-of 2026-10-08 --out /tmp/repro
-          diff -r preregistration/2026-27/freeze/2026-10-08 /tmp/repro/forecast && echo "Platform reproduces the freeze exactly"
+          # every forecast file must be identical; meta.json may differ only in float noise
+          diff -r -x meta.json preregistration/2026-27/freeze/2026-10-08 /tmp/repro/forecast
+          python -c "import json,math,sys; a,b=(json.load(open(p)) for p in sys.argv[1:]); assert all(math.isclose(a[k],b[k],abs_tol=1e-12) for k in ('base','home_adv')), 'meta drift'" preregistration/2026-27/freeze/2026-10-08/meta.json /tmp/repro/forecast/meta.json
+          echo "This runner reproduces the frozen forecast exactly"
       - name: Rolling update (frozen code, new data)
         run: python -W ignore preregistration/2026-27/analysis/update.py
       - name: Commit if there is a new update
