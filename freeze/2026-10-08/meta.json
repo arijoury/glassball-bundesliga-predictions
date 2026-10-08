@@ -1,0 +1,31 @@
+{
+  "as_of": "2026-10-08",
+  "matches_played": 36,
+  "matches_forecast": 270,
+  "training_matches_glass_box": 1182,
+  "training_matches_gbm": 4014,
+  "hyper": {
+    "half_life_days": 270.0,
+    "prior_precision": 10.0,
+    "promoted_attack": -0.3,
+    "promoted_defence": 0.3,
+    "rho": -0.1,
+    "window_days": 1460
+  },
+  "base": 0.3063031227416472,
+  "home_adv": 0.22698663544578926,
+  "n_sims": 20000,
+  "seed": 20261008,
+  "promoted": [
+    "Elversberg",
+    "Paderborn",
+    "Schalke 04"
+  ],
+  "versions": {
+    "python": "3.14.4",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "scipy": "1.18.1",
+    "sklearn": "1.9.1"
+  }
+}
