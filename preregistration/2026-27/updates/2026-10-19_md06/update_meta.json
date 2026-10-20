@@ -1,0 +1,8 @@
+{
+  "matchday": 6,
+  "as_of": "2026-10-19",
+  "graded_matches": 18,
+  "frozen_code_verified": true,
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "python": "3.14.4"
+}
