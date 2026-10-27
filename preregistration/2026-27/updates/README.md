@@ -6,5 +6,6 @@ Ranked probability score of the **frozen** forecast so far (lower is better):
 
 | Update | Matchday | Matches graded | Glass box (Dixon-Coles) | GBM (Elo + form) | Bookmakers (avg. closing odds) | Base rates |
 |---|---|---|---|---|---|---|
+| [2026-10-26_md07](2026-10-26_md07/SUMMARY.md) | 7 | 27 | 0.2159 | 0.2315 | 0.2271 | 0.2297 |
 | [2026-10-19_md06](2026-10-19_md06/SUMMARY.md) | 6 | 18 | 0.2066 | 0.2141 | 0.2202 | 0.2271 |
 | [2026-10-12_md05](2026-10-12_md05/SUMMARY.md) | 5 | 9 | 0.2201 | 0.2419 | 0.2369 | 0.2349 |

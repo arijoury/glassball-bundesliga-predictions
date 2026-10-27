@@ -1,0 +1,5 @@
+model,matches,rps,brier,logloss,accuracy
+Glass box (Dixon-Coles),27,0.21592,0.60650,1.00379,0.55556
+GBM (Elo + form),27,0.23151,0.65761,1.10077,0.48148
+Bookmakers (avg. closing odds),27,0.22706,0.63426,1.05151,0.59259
+Base rates,27,0.22971,0.63279,1.04911,0.48148
