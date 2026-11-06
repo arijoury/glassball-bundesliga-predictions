@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   update:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: "latest" moved to 26.04, which has no build of the frozen Python 3.14.4
     if: github.repository == 'arijoury/glassball-bundesliga-predictions'
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +42,7 @@ jobs:
             git config user.name "glassball-bot"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add preregistration/2026-27/updates
-            git commit -m "Rolling update: $(ls -1 preregistration/2026-27/updates | grep md | tail -1)"
+            git commit -m "Rolling update: $(ls -1 preregistration/2026-27/updates | grep _md | tail -1)"
             git push
           else
             echo "No new matchday."
