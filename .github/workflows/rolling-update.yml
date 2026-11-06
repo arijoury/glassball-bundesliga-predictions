@@ -29,7 +29,7 @@ jobs:
         run: ./preregistration/2026-27/verify.sh
       - name: Check this machine reproduces the freeze (same code, same data, same cut-off)
         run: |
-          python -W ignore preregistration/2026-27/analysis/update.py --matchday 4 --as-of 2026-10-08 --out /tmp/repro
+          python -W ignore preregistration/2026-27/analysis/update.py --matchday 4 --as-of 2026-10-08 --frozen-data --out /tmp/repro
           # every forecast file must be identical; meta.json may differ only in float noise
           diff -r -x meta.json preregistration/2026-27/freeze/2026-10-08 /tmp/repro/forecast
           python -c "import json,math,sys; a,b=(json.load(open(p)) for p in sys.argv[1:]); assert all(math.isclose(a[k],b[k],abs_tol=1e-12) for k in ('base','home_adv')), 'meta drift'" preregistration/2026-27/freeze/2026-10-08/meta.json /tmp/repro/forecast/meta.json

@@ -126,13 +126,18 @@ def main():
     ap.add_argument("--matchday", type=int, help=argparse.SUPPRESS)   # testing: pretend this is the latest
     ap.add_argument("--as-of", help=argparse.SUPPRESS)                # testing: override the cut-off
     ap.add_argument("--out", help=argparse.SUPPRESS)                  # testing: write elsewhere
+    ap.add_argument("--frozen-data", action="store_true", help=argparse.SUPPRESS)  # reproduction check: use the 8 Oct snapshot, not fresh data
     a = ap.parse_args()
     verify_frozen_code()
 
     with tempfile.TemporaryDirectory() as t:
         tmp = Path(t)
-        fetch(FD_URL, tmp / "D1_2627.csv")
-        fetch(OLDB_URL, tmp / "oldb.json")
+        if a.frozen_data:
+            shutil.copy(PRE / "data" / "raw" / "D1_2627.csv", tmp / "D1_2627.csv")
+            shutil.copy(PRE / "data" / "raw" / "openligadb_bl1_2026_20261008.json", tmp / "oldb.json")
+        else:
+            fetch(FD_URL, tmp / "D1_2627.csv")
+            fetch(OLDB_URL, tmp / "oldb.json")
         fd, fx = load_sources(tmp)
         md = a.matchday or latest_complete_matchday(fd, fx)
         if md is None or (md <= FROZEN_MD and not a.matchday):
