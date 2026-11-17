@@ -4,7 +4,7 @@
 
 No API keys, no accounts, no data wrangling. glassball downloads free public data and caches it on your machine.
 
-The methods are explained step by step, with code, in the companion book: Gao et al., [*Soccer Analytics with Machine Learning*](https://learning.oreilly.com/library/view/soccer-analytics-with/9781098181109/), O'Reilly 2026.
+The methods are explained step by step, with code, in the companion book [*Soccer Analytics with Machine Learning*](https://learning.oreilly.com/library/view/soccer-analytics-with/9781098181109/) by Haipeng Gao, Ari Joury, Weining Shen and Guanyu Hu (O'Reilly, 2026).
 
 ## Install
 
@@ -171,7 +171,7 @@ Data is cached in `~/.cache/glassball` (set `GLASSBALL_CACHE` to change it). Fin
 
 ## Live test: 2026/27
 
-Backtests can be tuned until they look good, so this model is also being tested in public. Its forecast for the rest of the 2026/27 season was frozen and fingerprinted on 8 October 2026, before matchday 5, together with the rules for grading it. Everything is in [`preregistration/2026-27/`](preregistration/2026-27/), starting with the [results summary](preregistration/2026-27/RESULTS_2026-10-08.md). The first public grading is at Machine Learning Week Europe, Munich, 17 November 2026.
+Backtests can be tuned until they look good, so this model is also being tested in public. Its forecast for the rest of the 2026/27 season was frozen and fingerprinted on 8 October 2026, before matchday 5, together with the rules for grading it. Everything is in [`preregistration/2026-27/`](preregistration/2026-27/), starting with the [results summary](preregistration/2026-27/RESULTS_2026-10-08.md). The first public grading was at Machine Learning Week Europe, Munich, 17 November 2026. The notebook from that talk is in [`talk/`](talk/): it grades the forecast against the newest update, and you can run it yourself.
 
 ## Development
 
@@ -186,7 +186,7 @@ The tests include an offline run of every CLI command, and a check that the pack
 
 The modelling behind glassball (Poisson regression, classification, gradient boosting, feature engineering, evaluating forecasts against betting markets) is covered step by step in:
 
-> Gao et al., [*Soccer Analytics with Machine Learning*](https://learning.oreilly.com/library/view/soccer-analytics-with/9781098181109/), O'Reilly 2026
+> Haipeng Gao, Ari Joury, Weining Shen and Guanyu Hu, [*Soccer Analytics with Machine Learning: Learning Predictive Modeling Techniques with Sports Data*](https://learning.oreilly.com/library/view/soccer-analytics-with/9781098181109/), O'Reilly, 2026
 
 MIT licensed.
 
