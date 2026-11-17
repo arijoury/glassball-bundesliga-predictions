@@ -1,0 +1,6 @@
+season,matchday,kickoff,home,away,home_pos,home_pts,away_pos,away_pts,model_pH,book_pH,score,home_won
+2021/22,26,2022-03-13 17:30:00,Ein Frankfurt,Bochum,10,34,11,32,0.576,0.601,2-1,1
+2024/25,31,2025-04-26 15:30:00,Wolfsburg,Freiburg,12,39,5,48,0.452,0.404,0-1,0
+2019/20,11,2019-11-10 13:30:00,M'gladbach,Werder Bremen,1,22,13,11,0.52,0.485,3-1,1
+2022/23,15,2022-11-11 20:30:00,M'gladbach,Dortmund,9,19,6,25,0.35,0.289,4-2,1
+2024/25,33,2025-05-10 15:30:00,Union Berlin,Heidenheim,13,37,16,26,0.433,0.471,0-3,0
